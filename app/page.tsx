@@ -44,40 +44,69 @@ export default function Home() {
       const response = await axios.get<{ data: IntensityData[] }>(
         `https://api.carbonintensity.org.uk/intensity/date/${newDate}`
       );
-      const currIntensity = response.data.data
+    
       const currentDate = new Date();
       const currentHours = currentDate.getHours();
       const currentMinutes = currentDate.getMinutes();
       const currentTime = `${currentHours}:${currentMinutes}`;
-
-      const intensityForCurrentTime = currIntensity.find((entry) => {
-        const fromTime = new Date(entry.from).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-        console.log(fromTime, currentTime)
-        return fromTime === currentTime;
-      });
-
-      console.log(intensityForCurrentTime, "curr");
+    
       const lowestIntensity = response.data.data.reduce(
         (minObject, currentObject) => {
-          if (!minObject || currentObject.intensity.forecast < minObject.intensity.forecast) {
+          if (
+            !minObject ||
+            (currentObject.from < currentTime && currentObject.from > minObject.from) ||
+            (currentObject.from >= currentTime && currentObject.from < minObject.from)
+          ) {
             return currentObject;
           }
           return minObject;
         },
         null as IntensityData | null
       );
-
-      setLowestIntensityMessage(formatIntensityMessage(lowestIntensity));
-
-      dispatch(
-        setIntensity({
-          forecast: lowestIntensity?.intensity.forecast || 0,
-          index: lowestIntensity?.intensity.index || "",
-        })
-      );
+    
+      if (lowestIntensity && lowestIntensity.from < currentTime) {
+        const nextDay = new Date(currentDate);
+        nextDay.setDate(currentDate.getDate() + 1);
+        const nextDayFormatted = nextDay.toISOString().split('T')[0];
+        
+        const nextDayResponse = await axios.get<{ data: IntensityData[] }>(
+          `https://api.carbonintensity.org.uk/intensity/date/${nextDayFormatted}`
+        );
+    
+        const nextDayLowestIntensity = nextDayResponse.data.data.reduce(
+          (minObject, currentObject) => {
+            if (!minObject || currentObject.intensity.forecast < minObject.intensity.forecast) {
+              return currentObject;
+            }
+            return minObject;
+          },
+          null as IntensityData | null
+        );
+    
+        setLowestIntensityMessage(formatIntensityMessage(nextDayLowestIntensity));
+    
+        dispatch({
+          type: 'SET_INTENSITY',
+          payload: {
+            forecast: nextDayLowestIntensity?.intensity.forecast || 0,
+            index: nextDayLowestIntensity?.intensity.index || '',
+          },
+        });
+      } else {
+        setLowestIntensityMessage(formatIntensityMessage(lowestIntensity));
+    
+        dispatch({
+          type: 'SET_INTENSITY',
+          payload: {
+            forecast: lowestIntensity?.intensity.forecast || 0,
+            index: lowestIntensity?.intensity.index || '',
+          },
+        });
+      }
     } catch (error) {
-      console.error("Error fetching carbon intensity data:", error);
+      console.error('Error fetching carbon intensity data:', error);
     }
+    
   };
 
   const [postalCode, setPostalCode] = useState<string>('');
