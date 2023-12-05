@@ -30,6 +30,15 @@ interface SimplifiedCarbonIntensityData {
     }
   ];
 }
+interface IntensityData {
+  from: string;
+  to: string;
+  intensity: {
+    forecast: number;
+    actual: number | null;
+    index: string;
+  };
+}
 
 export default function Home() {
   const dispatch = useDispatch();
@@ -38,15 +47,72 @@ export default function Home() {
 
 
   const [selectedDate, setSelectedDate] = useState<string>('');
-  const handleDateChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setSelectedDate(event.target.value);
+  
+  const handleDateChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const newDate = event.target.value;
+    setSelectedDate(newDate);
+
+    try {
+      const response = await axios.get<{ data: IntensityData[] }>(
+        `https://api.carbonintensity.org.uk/intensity/date/${newDate}`
+      );
+    const currIntensity =response.data.data
+    const currentDate = new Date();
+const currentHours = currentDate.getHours();
+const currentMinutes = currentDate.getMinutes();
+const currentTime = `${currentHours}:${currentMinutes}`;
+
+const intensityForCurrentTime = currIntensity.find((entry) => {
+  const fromTime = new Date(entry.from).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+console.log(fromTime,currentTime)
+  return fromTime === currentTime;
+});
+
+console.log(intensityForCurrentTime,"curr");
+      const lowestIntensity = response.data.data.reduce(
+        (minObject, currentObject) => {
+          if (!minObject || currentObject.intensity.forecast < minObject.intensity.forecast) {
+            return currentObject;
+          }
+          return minObject;
+        },
+        null as IntensityData | null
+      );
+    
+      console.log("Lowest Intensity:", lowestIntensity);
+    
+      dispatch(
+        setIntensity({
+          forecast: lowestIntensity?.intensity.forecast || 0,
+          index: lowestIntensity?.intensity.index || "",
+        })
+      );
+    } catch (error) {
+      console.error("Error fetching carbon intensity data:", error);
+    }
   };
 
   const [postalCode, setPostalCode] = useState<string>('');
   const handlePostalCodeChange = (event: ChangeEvent<HTMLInputElement>) => {
     setPostalCode(event.target.value);
   };
+  const handleSearch = async () => {
+    try {
+      const response = await axios.get<SimplifiedCarbonIntensityData>(
+        `https://api.carbonintensity.org.uk/regional/postcode/${postalCode}`
+      );
 
+      const intensity = response.data.data[0].data[0].intensity;
+      dispatch(
+        setIntensity({ forecast: intensity.forecast, index: intensity.index })
+      );
+
+      console.log("Intensity Forecast:", intensity.forecast);
+      console.log("Intensity Index:", intensity.index);
+    } catch (error) {
+      console.error("Error fetching carbon intensity data:", error);
+    }
+  };
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -101,12 +167,12 @@ export default function Home() {
             <CarbonIntensityInfo index={index} forecast={forecast} />
           </div>
           <div className="flex-1">
-            {/* Added the flex-1 class here */}
             <DateInput label="Select Date" value={selectedDate} onChange={handleDateChange} />
             <PostalCodeInput
               label="Enter Postal Code"
               value={postalCode}
               onChange={handlePostalCodeChange}
+              onSearch={handleSearch}
             />
           </div>
         </div>
