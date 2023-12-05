@@ -7,47 +7,35 @@ import CarbonIntensityInfo from '@/components/CarbonIntensityInfo';
 import DateInput from '@/components/DateInput';
 import PostalCodeInput from '@/components/PostalCodeInput';
 import axios from 'axios';
+import { IntensityData, SimplifiedCarbonIntensityData, PostcodeData } from '@/types';
 
-interface PostcodeData {
-  results?: Array<{
-    components?: {
-      postcode?: string;
-    };
-  }>;
-}
-
-interface SimplifiedCarbonIntensityData {
-  data: [
-    {
-      data: [
-        {
-          intensity: {
-            forecast: number;
-            index: string;
-          };
-        }
-      ];
-    }
-  ];
-}
-interface IntensityData {
-  from: string;
-  to: string;
-  intensity: {
-    forecast: number;
-    actual: number | null;
-    index: string;
-  };
-}
 
 export default function Home() {
   const dispatch = useDispatch();
-  
   const { forecast, index } = useSelector((state: RootState) => state.carbonIntensity);
-
-
   const [selectedDate, setSelectedDate] = useState<string>('');
-  
+  const formatIntensityMessage = (lowestIntensity: IntensityData | null) => {
+    if (!lowestIntensity) {
+      return 'No intensity data available.';
+    }
+
+    const { from, to, intensity } = lowestIntensity;
+
+    const formattedFrom = new Date(from).toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    const formattedTo = new Date(to).toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    return `Lowest intensity period: From ${formattedFrom} to ${formattedTo} - Forecast: ${intensity.forecast}, Index: ${intensity.index}`;
+  };
+  const [lowestIntensityMessage, setLowestIntensityMessage] = useState<string>('');
   const handleDateChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const newDate = event.target.value;
     setSelectedDate(newDate);
@@ -56,19 +44,19 @@ export default function Home() {
       const response = await axios.get<{ data: IntensityData[] }>(
         `https://api.carbonintensity.org.uk/intensity/date/${newDate}`
       );
-    const currIntensity =response.data.data
-    const currentDate = new Date();
-const currentHours = currentDate.getHours();
-const currentMinutes = currentDate.getMinutes();
-const currentTime = `${currentHours}:${currentMinutes}`;
+      const currIntensity = response.data.data
+      const currentDate = new Date();
+      const currentHours = currentDate.getHours();
+      const currentMinutes = currentDate.getMinutes();
+      const currentTime = `${currentHours}:${currentMinutes}`;
 
-const intensityForCurrentTime = currIntensity.find((entry) => {
-  const fromTime = new Date(entry.from).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-console.log(fromTime,currentTime)
-  return fromTime === currentTime;
-});
+      const intensityForCurrentTime = currIntensity.find((entry) => {
+        const fromTime = new Date(entry.from).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+        console.log(fromTime, currentTime)
+        return fromTime === currentTime;
+      });
 
-console.log(intensityForCurrentTime,"curr");
+      console.log(intensityForCurrentTime, "curr");
       const lowestIntensity = response.data.data.reduce(
         (minObject, currentObject) => {
           if (!minObject || currentObject.intensity.forecast < minObject.intensity.forecast) {
@@ -78,9 +66,9 @@ console.log(intensityForCurrentTime,"curr");
         },
         null as IntensityData | null
       );
-    
-      console.log("Lowest Intensity:", lowestIntensity);
-    
+
+      setLowestIntensityMessage(formatIntensityMessage(lowestIntensity));
+
       dispatch(
         setIntensity({
           forecast: lowestIntensity?.intensity.forecast || 0,
@@ -165,6 +153,7 @@ console.log(intensityForCurrentTime,"curr");
         <div className="container mx-auto flex">
           <div className="flex-1 px-8">
             <CarbonIntensityInfo index={index} forecast={forecast} />
+            <p className="text-lg font-semi-bold my-4">{lowestIntensityMessage}</p>
           </div>
           <div className="flex-1">
             <DateInput label="Select Date" value={selectedDate} onChange={handleDateChange} />
